@@ -768,14 +768,6 @@ end
 ```
 
 ```julia
-@test abs(calc_χ²_my_way(lambdas,conv_spectrum, conv_spectrum, σ_obs1, σ_obs2, 0.0 )) < 1e-8
-```
-
-```julia
-@test calc_χ²_my_way(lambdas,conv_spectrum, conv_spectrum, σ_obs1, σ_obs2, 10.0 ) ≈ calc_χ²_loop(lambdas,conv_spectrum, conv_spectrum, σ_obs1, σ_obs2, 10.0 )
-```
-
-```julia
 function calc_χ²_loop(lambdas::AbstractArray, spec1::AbstractSpectrum, spec2::AbstractSpectrum, σ1::AbstractArray, σ2::AbstractArray, v::Number )
     @assert size(lambdas) == size(σ1) == size(σ2)
     c = lab6.speed_of_light
@@ -792,6 +784,14 @@ function calc_χ²_loop(lambdas::AbstractArray, spec1::AbstractSpectrum, spec2::
     end
     return χ²
 end
+```
+
+```julia
+@test abs(calc_χ²_my_way(lambdas,conv_spectrum, conv_spectrum, σ_obs1, σ_obs2, 0.0 )) < 1e-8
+```
+
+```julia
+@test calc_χ²_my_way(lambdas,conv_spectrum, conv_spectrum, σ_obs1, σ_obs2, 10.0 ) ≈ calc_χ²_loop(lambdas,conv_spectrum, conv_spectrum, σ_obs1, σ_obs2, 10.0 )
 ```
 
 ```julia
