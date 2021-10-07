@@ -18,7 +18,7 @@ begin
 	# Packages for Notebook experience
 	using PlutoUI, PlutoTeachingTools, PlutoTest
 	using Plots
-	
+
 	# Packages for parallelization
 	#using SharedArrays
 	using CpuId
@@ -26,13 +26,13 @@ begin
 	using FLoops
 	# Packages for benchmarking
 	using BenchmarkTools
-	
+
 	# Packages needed by model
 	using Distributions, Random
 	using QuadGK
 	using StaticArrays
 	Random.seed!(42)
-	
+
 	# Code for our model
 	ModelSpectrum = ingredients("./src/model_spectrum.jl")
 	import .ModelSpectrum:AbstractSpectrum, SimulatedSpectrum, ConvolvedSpectrum, GaussianMixtureConvolutionKernel, doppler_shifted_spectrum
@@ -40,20 +40,20 @@ end
 
 # ╔═╡ 85aad005-eac0-4f71-a32c-c8361c31813b
 md"""
-# Lab 5, Exercise 1
-## Parallelization: Shared-memory model, Multi-threading 
+# Lab 6, Exercise 1
+## Parallelization: Shared-memory model, Multi-threading
 """
 
 # ╔═╡ bdf61711-36e0-40d5-b0c5-3bac20a25aa3
 md"""
-In this lab, we'll explore a multiple different ways that we can parallelize calculations across multiple cores of a single workstation or server. 
-This exercise will focus on parallelization using multiple *threads*.  
-A separate exercise will focus on parallelization using multiple *processes*, but using a Jupyter notebook, rather than a Pluto notebook (due to internals of how Pluto works).  
+In this lab, we'll explore a multiple different ways that we can parallelize calculations across multiple cores of a single workstation or server.
+This exercise will focus on parallelization using multiple *threads*.
+A separate exercise will focus on parallelization using multiple *processes*, but using a Jupyter notebook, rather than a Pluto notebook (due to internals of how Pluto works).
 """
 
 # ╔═╡ 629442ba-a968-4e35-a7cb-d42a0a8783b4
 protip(md"""
-In my experience, parallelization via multiple threads tends to be more efficient than using multiple processes.  Multi-threading is my "go-to" method for an initial parallelization.  That said, it's good to be aware of some of the reasons that others may choose to parallelize their code over multiple processes (e.g., if you're concerned about security of data, robustness to errors in one process).  For me, the main advantage of using multiple processes is that multiple processes will be necessary once we transition to distributed memory computing.  Therefore, parallelizing your code using multiple processes can make it easier to scale up to more cores than are avaliable in a single node.  
+In my experience, parallelization via multiple threads tends to be more efficient than using multiple processes.  Multi-threading is my "go-to" method for an initial parallelization.  That said, it's good to be aware of some of the reasons that others may choose to parallelize their code over multiple processes (e.g., if you're concerned about security of data, robustness to errors in one process).  For me, the main advantage of using multiple processes is that multiple processes will be necessary once we transition to distributed memory computing.  Therefore, parallelizing your code using multiple processes can make it easier to scale up to more cores than are avaliable in a single node.
 
 That said, near the end of this exercise we'll see an example of how a programming interfaces that makes it easy to transition code between multi-threaded and mulit-process models.
 """)
@@ -61,8 +61,8 @@ That said, near the end of this exercise we'll see an example of how a programmi
 # ╔═╡ 0bee1c3c-b130-49f2-baa4-efd8e3b49fdc
 md"""
 ## Hardware & Pluto server configuration
-Most modern workstations and even laptops have multiple processor cores. 
-If you're using the ICDS-ACI portal to access the Jupyter notebook server, then you need to request that multiple processor cores be allocated to your session when you first submit the request for the JupyterLab server using the box labeled "Number of Cores", i.e. before you open this notebook and even before you start your Pluto session. 
+Most modern workstations and even laptops have multiple processor cores.
+If you're using the ICDS-ACI portal to access the Jupyter notebook server, then you need to request that multiple processor cores be allocated to your session when you first submit the request for the JupyterLab server using the box labeled "Number of Cores", i.e. before you open this notebook and even before you start your Pluto session.
 """
 
 # ╔═╡ f76f329a-8dde-4790-96f2-ade735643aeb
@@ -73,9 +73,9 @@ end
 
 # ╔═╡ 0e4d7808-47e2-4740-ab93-5d3973eecaa8
 if haskey(ENV,"PBS_NUM_PPN")
-	if pbs_procs_per_node > 4 
-		warning_box(md"While we're in class (and the afternoon/evening before labs are due), please ask for just 4 cores, so there will be enough to go around.  
-			
+	if pbs_procs_per_node > 4
+		warning_box(md"While we're in class (and the afternoon/evening before labs are due), please ask for just 4 cores, so there will be enough to go around.
+
 		If you return to working on the lab outside of class, then feel free to try benchmarking the code using 8 cores or even 16 cores. Anytime you ask for several cores, then please be extra diligent about closing your session when you're done.")
 	end
 end
@@ -166,22 +166,22 @@ md"# Calculation to parallelize"
 md"""
 For this lab, I've written several functions that will be used to generate simulated spectra with multiple absorption lines.  This serves a couple of purposes.
 First, you'll use the code in the exercise, so you have a calculation that's big enough to be worth parallelizing.  For the purposes of this exercise, it's not essential that you review the code I provided in the `src/*.jl` files.  However, the second purpose of this example is providing code that demonstrates several of the programming patterns that we've discussed in class.  For example, the code in the `ModelSpectrum` module
-- is in the form of several small functions, each which does one specific task.  
+- is in the form of several small functions, each which does one specific task.
 - has been moved out of the Jupyter notebook and into `.jl` files in the `src` directory.
 - creates objects that compute a model spectrum and a convolution kernel.
-- uses [abstract types](https://docs.julialang.org/en/v1/manual/types/#Abstract-Types-1) and [parametric types](https://docs.julialang.org/en/v1/manual/types/#Parametric-Types-1), so as to create type-stable functions. 
+- uses [abstract types](https://docs.julialang.org/en/v1/manual/types/#Abstract-Types-1) and [parametric types](https://docs.julialang.org/en/v1/manual/types/#Parametric-Types-1), so as to create type-stable functions.
 - has been put into a Julia [module](https://docs.julialang.org/en/v1/manual/modules/index.html), so that it can be easily loaded and so as to limit potential for namespace conflicts.
 
-You don't need to read all of this code right now.  But, when you're writing code for your class project, you're likely to want to make use of some of these same programming patterns.   It may be useful to refer back to this code later to help see examples of how to apply these design patterns in practice.  
-        
-In the Helper code section at the bottom of the notebook, we read the code in `src/ModelSpectrum.jl` and place it in a module named ModelSpectrum.  Note that this implicitly includes the code from other files: `continuum.jl`, `spectrum.jl` and `convolution_kernels.jl`. 
+You don't need to read all of this code right now.  But, when you're writing code for your class project, you're likely to want to make use of some of these same programming patterns.   It may be useful to refer back to this code later to help see examples of how to apply these design patterns in practice.
+
+In the Helper code section at the bottom of the notebook, we read the code in `src/ModelSpectrum.jl` and place it in a module named ModelSpectrum.  Note that this implicitly includes the code from other files: `continuum.jl`, `spectrum.jl` and `convolution_kernels.jl`.
 Then we'll bring several of the custom types into scope, so we can use them easily below.
 """
 
 # ╔═╡ c31cf36c-21ec-46f1-96aa-b014ff094f8a
 md"""
 ## Synthetic Spectrum
-In this exercise, we're going to create a model spectrum consisting of continuum, stellar absorption lines, telluric absorption lines.  
+In this exercise, we're going to create a model spectrum consisting of continuum, stellar absorption lines, telluric absorption lines.
 The `ModelSpectrum` module provides a `SimulatedSpectrum` type.
 We need to create a `SimulatedSpectrum` object that contains specific parameter values.  The function below will do that for us.
 """
@@ -192,11 +192,11 @@ function make_spectrum_object(;lambda_min = 4500, lambda_max = 7500, flux_scale 
         num_star_lines = 200, num_telluric_lines = 100, limit_line_effect = 10.0)
 
     continuum_param = flux_scale .* [1.0, 1e-5, -2e-8]
-    
+
     star_line_locs = rand(Uniform(lambda_min,lambda_max),num_star_lines)
     star_line_widths = fill(1.0,num_star_lines)
     star_line_depths = rand(Uniform(0,1.0),num_star_lines)
-    
+
     telluric_line_locs = rand(Uniform(lambda_min,lambda_max),num_telluric_lines)
     telluric_line_widths = fill(0.2,num_telluric_lines)
     telluric_line_depths = rand(Uniform(0,0.4),num_telluric_lines)
@@ -206,7 +206,7 @@ end
 
 # ╔═╡ 7026e51d-c3e4-4503-9f35-71074b0c2f1a
 md"""
-Next, we specify a set of wavelengths where the spectrum will be defined, 
+Next, we specify a set of wavelengths where the spectrum will be defined,
 and create a functor (or function-like object) that contains all the line properties and can compute the synethic spectrum.
 """
 
@@ -218,7 +218,7 @@ end;
 
 # ╔═╡ 86b8dd31-1261-4fb9-bfd3-13f6f01e7790
 # Create a functor (function object) that computes a model spectrum that we'll analyze below
-raw_spectrum = make_spectrum_object(lambda_min=lambda_min,lambda_max=lambda_max)	
+raw_spectrum = make_spectrum_object(lambda_min=lambda_min,lambda_max=lambda_max)
 
 # ╔═╡ 16ad0225-c7d6-455b-8eb0-3e93c9f9f91a
 md"## Convolved spectrum
@@ -264,7 +264,7 @@ That's fairly crowded, you it may be useful to zoom in on a narrower range.
 
 # ╔═╡ 4d1cf57f-b394-4f37-98c3-0d765f4ee635
 md"""
-Plot width: 
+Plot width:
 $(@bind idx_plt_width Slider(8:min(1024,length(lambdas)), default=min(128,floor(Int,length(lambdas)//2)) ) )
 center:
   $(@bind idx_plt_center Slider(1:length(lambdas), default = floor(Int,length(lambdas)//2)) )
@@ -287,7 +287,7 @@ end
 
 # ╔═╡ ee96411d-e3fa-442b-b0fe-10d6ede37b6a
 md"""
-You can adjust the sliders to interactively explore our model spectra. 
+You can adjust the sliders to interactively explore our model spectra.
 """
 
 # ╔═╡ b92aad2e-8a3b-4edf-ae7e-6e3cff6eead4
@@ -298,13 +298,13 @@ md"""
 # Serial implementations
 ## Benchmarking spectrum (w/o convolution)
 
-Before we parallelize anything, we want to benchmark the calculation of spectra on a single processor.  To avoid an annoying lag when using the notebook, we won't use the `@benchmark` script.  Instead, we'll run each calculation just twice, once to ensure it's compiled and a second time for benchmarking it with the `@timed` macro.  When it comes time to benchmark your project code, you'll want to collect multiple samples to get accurate benchmarking results.  
+Before we parallelize anything, we want to benchmark the calculation of spectra on a single processor.  To avoid an annoying lag when using the notebook, we won't use the `@benchmark` script.  Instead, we'll run each calculation just twice, once to ensure it's compiled and a second time for benchmarking it with the `@timed` macro.  When it comes time to benchmark your project code, you'll want to collect multiple samples to get accurate benchmarking results.
 """
 
 # ╔═╡ b195ebd2-9584-40b8-ae3e-6d9ce88b5398
 md"""
-Let's think about what's happening with the serial version.  
-With `raw_spectrum(lambdas)` or `raw_spectrum.(lambdas)` we will evalute the spectrum model at each of the specified wavelengths using a few different syntaxes.  
+Let's think about what's happening with the serial version.
+With `raw_spectrum(lambdas)` or `raw_spectrum.(lambdas)` we will evalute the spectrum model at each of the specified wavelengths using a few different syntaxes.
 """
 
 # ╔═╡ 658f73c3-1e7a-47da-9130-06673f484ba1
@@ -323,14 +323,14 @@ end
 
 # ╔═╡ d6d3a2d1-241e-44c1-a11b-5bfb2b3c5f4b
 md"""
-As expected, the different versions perform very similarly in terms of wall-clock time and memory allocated.  
+As expected, the different versions perform very similarly in terms of wall-clock time and memory allocated.
 """
 
 # ╔═╡ 0344a74d-456b-44f0-84dc-c2fdbd41a379
 md"""
 ## Benchmarking convolved spectrum
 
-Next, we'll evaluate the convolution of the raw spectrum with the PDF model at each of the wavelengths, using `conv_spectrum`. 
+Next, we'll evaluate the convolution of the raw spectrum with the PDF model at each of the wavelengths, using `conv_spectrum`.
 """
 
 # ╔═╡ 6ccce964-0439-4707-adf9-e171fd703609
@@ -342,25 +342,25 @@ end
 
 # ╔═╡ a172be44-1ac0-4bd8-a3d1-bac5666ab68e
 if true
- 	result_spec_serial_broadcast = conv_spectrum.(lambdas) 
-	stats_spec_serial_broadcast = @timed conv_spectrum.(lambdas) 
-	(;  time=stats_spec_serial_broadcast.time, 
+ 	result_spec_serial_broadcast = conv_spectrum.(lambdas)
+	stats_spec_serial_broadcast = @timed conv_spectrum.(lambdas)
+	(;  time=stats_spec_serial_broadcast.time,
 		bytes=stats_spec_serial_broadcast.bytes )
 end
 
 # ╔═╡ 51adffd7-8fb6-4ed2-8510-303a37d6efc3
 md"""
 Now, the two implementations performed very differently.  Let's think about what's causing that difference.
-In each case, the convolution integral is being computed numerically by [QuadGK.jl](https://github.com/JuliaMath/QuadGK.jl).  On one hand, it's impressive that QuadGK.jl was written in a generic way, so that it can compute an integral of a scalar (when we used the broadcasting notation) or integral of vectors (when we passed the vector of wavelengths without broadcasting).  
+In each case, the convolution integral is being computed numerically by [QuadGK.jl](https://github.com/JuliaMath/QuadGK.jl).  On one hand, it's impressive that QuadGK.jl was written in a generic way, so that it can compute an integral of a scalar (when we used the broadcasting notation) or integral of vectors (when we passed the vector of wavelengths without broadcasting).
 On the other hand, there's a significant difference in the wall clock time and lots more memory being allocated when we pass the vector, instead of using broadcasting.
-When we pass a vector, the `quadgk` is computing the convolution integral is using vectors.  Since the size of the vectors isn't known at compile time they must be allocated  on the heap.  This results in many unnecessary memory allocations (compared to if the calculations were done one wavelength at a time).  
+When we pass a vector, the `quadgk` is computing the convolution integral is using vectors.  Since the size of the vectors isn't known at compile time they must be allocated  on the heap.  This results in many unnecessary memory allocations (compared to if the calculations were done one wavelength at a time).
 
 We can get around this problem by using broadcasting or map, so the convolution integral is performed on scalars, once for each wavelength.  This significantly reduces the number of memory allocations and the runtime.  This also has the advantage that we've broken up the work into many independent calculations that could be performed in parallel.
 """
 
 # ╔═╡ 71d943e3-761a-4337-b412-b0b768483bc2
 protip(md"Interestingly, there's actually more work to do in the case of computing integrals of scalars, since the adaptive quadrature algorithm chooses how many points and and where to evaluate the integrand separately for each wavelength.  However, the added cost of memory allocations is much more expensive than the cost of the added calculations.
-	
+
 Another complicating factor, the answers aren't identical.  This is because the criteria used by `quadgk` for when to stop evaluating the integrand at more points changes depending on whether it's deciding when to stop for each wavelength separately or for the entire vector at once.
 
 In principle, we could further optimize the serial version to avoid unnecessary memory allocations by diving into the internals of `quadgk` and preallocating a workspace for the calculations.  However, the code in the QuadGk.jl package isn't the easiest to read, and we'd have to spend considerable time understanding, writing and testing such changes.  In practice, it's often a better use of our time to parallelize a pretty efficient serial code, rather than writing the most efficient serial code possible.")
@@ -368,10 +368,10 @@ In principle, we could further optimize the serial version to avoid unnecessary 
 # ╔═╡ db1583f4-61cb-43e0-9326-d6c15d8fad5a
 md"""
 ## Map
-Our calculation is one example of a very useful programming pattern, known as **map**.  The map pattern corresponds to problems where the total work can be organized as doing one smaller calculation many times with different input values.  
+Our calculation is one example of a very useful programming pattern, known as **map**.  The map pattern corresponds to problems where the total work can be organized as doing one smaller calculation many times with different input values.
 Julia provides a [`map`](https://docs.julialang.org/en/v1/base/collections/#Base.map) function (as well as `map!` for writing to memory that's been preallocated ) that can be quite useful.
 `map(func,collection)` applies func to every element of the collection and returns a collection similar in size to collection.
-In our example, each input wavelength is mapped to out output flux.  
+In our example, each input wavelength is mapped to out output flux.
 """
 
 # ╔═╡ ca9c7d9e-e6cc-46cc-8a9b-ccda123591a2
@@ -390,7 +390,7 @@ end
 
 # ╔═╡ f108d26b-6c75-4eb6-9e88-a60ec038a73c
 md"""
-As expected, the map versions perform very similarly in terms of wall-clock time and memory allocated to the broadcasted versions for both the raw and convolved spectra.  
+As expected, the map versions perform very similarly in terms of wall-clock time and memory allocated to the broadcasted versions for both the raw and convolved spectra.
 """
 
 # ╔═╡ e71cede9-382e-47e2-953a-2fa96ed50002
@@ -421,8 +421,8 @@ end
 # ╔═╡ 9941061a-ad42-46b0-9d0f-7584ebca7c62
 if true
 	result_spec_serial_loop = calc_spectrum_loop(lambdas,conv_spectrum)
-	stats_spec_serial_loop = @timed calc_spectrum_loop(lambdas,conv_spectrum) 
-	(;  time=stats_spec_serial_loop.time, 
+	stats_spec_serial_loop = @timed calc_spectrum_loop(lambdas,conv_spectrum)
+	(;  time=stats_spec_serial_loop.time,
 		bytes=stats_spec_serial_loop.bytes )
 end
 
@@ -433,7 +433,7 @@ md"As expected the performance is very similar to the broadcasted for mappeed ve
 md"# Parallelization via multiple threads"
 
 # ╔═╡ 3717d201-0bc3-4e3c-8ecd-d835e58f6821
-md"""	
+md"""
 Julia has native support for using multiple **threads**.  This is useful when you have one computer with multiple processor cores.  Then each thread can execute on a separate processor core.  Because the threads are part of the same **process**, every thread has access to all the memory used by every other thread.  Programming with threads requires being careful to avoid undefined behavior because threads read and write to the same memory location in an unexpected order.  In a general multi-threaded programming can be intimidating, since arbitrary parallel code is hard to write, read, debug and maintain.  One way to keep things managable is to stick with some common programming patterns which are relatively easy to work with.  We'll explore using threads for a parallel for and a parallel map.
 """
 
@@ -465,14 +465,14 @@ end
 # ╔═╡ c7121d63-b1ff-4c38-8579-e1adbfef48ef
 if !ismissing(response_1b)
 	result_spec_ThreadsXmap = ThreadsX.map(conv_spectrum,lambdas)
-	stats_spec_ThreadsXmap = @timed ThreadsX.map(conv_spectrum,lambdas) 
-	(;  time=stats_spec_ThreadsXmap.time, 
+	stats_spec_ThreadsXmap = @timed ThreadsX.map(conv_spectrum,lambdas)
+	(;  time=stats_spec_ThreadsXmap.time,
 		bytes=stats_spec_ThreadsXmap.bytes )
 end
 
 # ╔═╡ 2399ce76-b6da-4a61-bcda-aee22dd275f8
 md"""
-1c. How did the performance improvement compare to the theoretical maximum speed-up factor and your expectations?  
+1c. How did the performance improvement compare to the theoretical maximum speed-up factor and your expectations?
 """
 
 # ╔═╡ a25c6705-54f4-4bad-966e-a8f13ae4c711
@@ -498,7 +498,7 @@ batchsize_for_ThreadsXmap = 256
 # ╔═╡ 0e9664ec-98d8-49d4-a376-24d4770c4c8f
 if !ismissing(response_1c)
 	ThreadsX.map(conv_spectrum,lambdas,basesize=batchsize_for_ThreadsXmap)
-	walltime_ThreadsXmap_batched = @elapsed ThreadsX.map(conv_spectrum,lambdas,basesize=batchsize_for_ThreadsXmap) 
+	walltime_ThreadsXmap_batched = @elapsed ThreadsX.map(conv_spectrum,lambdas,basesize=batchsize_for_ThreadsXmap)
 end
 
 # ╔═╡ 90c9d079-4bbc-4609-aa12-afa41a74b2fb
@@ -554,9 +554,9 @@ end
 
 # ╔═╡ b3a6004f-9d10-4582-832a-8917b701f2ad
 if !ismissing(response_1e)
-	result_spec_threaded_loop = calc_spectrum_threaded_for_loop(lambdas,conv_spectrum) 
-	stats_spec_threaded_loop = @timed calc_spectrum_threaded_for_loop(lambdas,conv_spectrum) 
-	(;  time=stats_spec_threaded_loop.time, 
+	result_spec_threaded_loop = calc_spectrum_threaded_for_loop(lambdas,conv_spectrum)
+	stats_spec_threaded_loop = @timed calc_spectrum_threaded_for_loop(lambdas,conv_spectrum)
+	(;  time=stats_spec_threaded_loop.time,
 		bytes=stats_spec_threaded_loop.bytes )
 end
 
@@ -576,9 +576,9 @@ end
 
 # ╔═╡ d1beea61-776f-4841-97e4-8d423ac22820
 if true
-	result_spec_threadsX_foreach = calc_spectrum_threadsX_foreach(lambdas,conv_spectrum) 
-	stats_spec_threadsX_foreach = @timed calc_spectrum_threadsX_foreach(lambdas,conv_spectrum) 
-	(;  time=stats_spec_threadsX_foreach.time, 
+	result_spec_threadsX_foreach = calc_spectrum_threadsX_foreach(lambdas,conv_spectrum)
+	stats_spec_threadsX_foreach = @timed calc_spectrum_threadsX_foreach(lambdas,conv_spectrum)
+	(;  time=stats_spec_threadsX_foreach.time,
 		bytes=stats_spec_threadsX_foreach.bytes )
 end
 
@@ -594,8 +594,8 @@ end
 
 # ╔═╡ c2c68b93-1cd4-4a38-9dd9-47ce2d591907
 if true
-	result_spec_flloop = calc_spectrum_flloop(lambdas,conv_spectrum) 
-	stats_spec_flloop = @timed calc_spectrum_flloop(lambdas,conv_spectrum) 
+	result_spec_flloop = calc_spectrum_flloop(lambdas,conv_spectrum)
+	stats_spec_flloop = @timed calc_spectrum_flloop(lambdas,conv_spectrum)
 	(;  time=stats_spec_flloop.time, bytes=stats_spec_flloop.bytes )
 end
 
@@ -610,10 +610,10 @@ Next, we'll consider problems that do require some communications between tasks,
 
 # ╔═╡ 547ad5ba-06ad-4707-a7ef-e444cf88ae53
 md"""
-# Reductions 
-Many common calculations can be formulated as a [**reduction operation**](https://en.wikipedia.org/wiki/Reduction_operator), where many inputs are transformed into one output.  Common examples would be `sum` or `maximum`.  One key property of reduction operations is that they are associative, meaning it's ok for the computer to change the order in which inputs are reduced.  (Thinking back to our lesson about floating point arithmetic, many operation aren't formally associative or commutative, but are still close enough that we're willing to let the computer reorder calculations.)   
+# Reductions
+Many common calculations can be formulated as a [**reduction operation**](https://en.wikipedia.org/wiki/Reduction_operator), where many inputs are transformed into one output.  Common examples would be `sum` or `maximum`.  One key property of reduction operations is that they are associative, meaning it's ok for the computer to change the order in which inputs are reduced.  (Thinking back to our lesson about floating point arithmetic, many operation aren't formally associative or commutative, but are still close enough that we're willing to let the computer reorder calculations.)
 
-When we have multiple processors, the input can be divided into subsets and each processor reduce each subset separately.  Then each processor only needs to communicate one value of the variable being reduced to another processor, even if the input is quite large.  For some problems, reductions also reduce the ammount of memory allocations necessary.  
+When we have multiple processors, the input can be divided into subsets and each processor reduce each subset separately.  Then each processor only needs to communicate one value of the variable being reduced to another processor, even if the input is quite large.  For some problems, reductions also reduce the ammount of memory allocations necessary.
 """
 
 # ╔═╡ 7ba35a63-ac61-434b-b759-95d505f62d9e
@@ -624,7 +624,7 @@ We'll explore different ways to perform reductions on an example problem where w
 # ╔═╡ 398ba928-899f-4843-ad58-25df67c81ffe
 function calc_mse_broadcasted(lambdas::AbstractArray, spec1::AbstractSpectrum, spec2::AbstractSpectrum, v::Number)
 	c = ModelSpectrum.speed_of_light
-	z = v/c 
+	z = v/c
 	spec2_shifted = doppler_shifted_spectrum(spec2,z)
 	mse = sum((spec1.(lambdas) .- spec2_shifted.(lambdas)).^2)
 	mse /= length(lambdas)
@@ -644,16 +644,16 @@ md"## Serial loop with reduction"
 
 # ╔═╡ 790377a7-1301-44a8-b300-418567737373
 md"""
-Now we'll write a version of the function using a serial for loop.  Note that we no longer need to allocate an output array, since `calc_mse_loop` only needs to return the reduced mean squared error and not the value of the spectrum at every wavelength. 
+Now we'll write a version of the function using a serial for loop.  Note that we no longer need to allocate an output array, since `calc_mse_loop` only needs to return the reduced mean squared error and not the value of the spectrum at every wavelength.
 """
 
 # ╔═╡ 536fe0c4-567c-4bda-8c95-347f183c007b
 function calc_mse_loop(lambdas::AbstractArray, spec1::AbstractSpectrum, spec2::AbstractSpectrum,  v::Number; ex = ThreadedEx())
 	c = ModelSpectrum.speed_of_light
-	z = v/c 
+	z = v/c
 	spec2_shifted = doppler_shifted_spectrum(spec2,z)
 	tmp1 = spec1(first(lambdas))
-    tmp2 = spec2_shifted(first(lambdas))	
+    tmp2 = spec2_shifted(first(lambdas))
 	mse = zero(promote_type(typeof(tmp1),typeof(tmp2)))
 	for i in eachindex(lambdas)
         @inbounds l = lambdas[i]
@@ -667,7 +667,7 @@ end
 
 # ╔═╡ db96a6c9-8352-47f3-8319-9c373aa03ff4
 if true
-	result_mse_loop = calc_mse_loop(lambdas,conv_spectrum,conv_spectrum,v) 
+	result_mse_loop = calc_mse_loop(lambdas,conv_spectrum,conv_spectrum,v)
 	stats_mse_loop = @timed calc_mse_loop(lambdas,conv_spectrum,conv_spectrum,v)
 end
 
@@ -678,9 +678,9 @@ As expected, the $(floor(Int,stats_mse_loop.bytes//1024^2)) MB allocated when we
 
 # ╔═╡ e36cda69-d300-4156-9bef-a372f94306d9
 md"""
-Similarly, it's likely that the wal time for the serial loop to compute the mean squared error $(stats_mse_loop.time) sec 
-is nearly twice that of the serial loop to compute one spectrum $(stats_spec_serial_loop.time) sec.  
-So far it doesn't seem particularly interesting.  
+Similarly, it's likely that the wal time for the serial loop to compute the mean squared error $(stats_mse_loop.time) sec
+is nearly twice that of the serial loop to compute one spectrum $(stats_spec_serial_loop.time) sec.
+So far it doesn't seem particularly interesting.
 """
 
 # ╔═╡ 161ea6af-5661-44e1-ae40-1b581b636c25
@@ -692,10 +692,10 @@ Next, we'll use [FLoops.jl](https://github.com/JuliaFolds/FLoops.jl) to compute 
 # ╔═╡ 1c1ccc51-e32a-4881-b892-095d2be55916
 function calc_mse_flloop(lambdas::AbstractArray, spec1::AbstractSpectrum, spec2::AbstractSpectrum,  v::Number; ex = ThreadedEx())
 	c = ModelSpectrum.speed_of_light
-	z = v/c 
+	z = v/c
 	spec2_shifted = doppler_shifted_spectrum(spec2,z)
 	tmp1 = spec1(first(lambdas))
-    tmp2 = spec2_shifted(first(lambdas))	
+    tmp2 = spec2_shifted(first(lambdas))
 	mse = zero(promote_type(typeof(tmp1),typeof(tmp2)))
 	@floop ex for i in eachindex(lambdas)
         @inbounds l = lambdas[i]
@@ -709,7 +709,7 @@ end
 
 # ╔═╡ 7def3535-6f90-4bf8-b86f-aac278666663
 md"""
-1f.  How do you expect the performance of `calc_mse_flloop` to compare to the performance of `calc_spectrum_flloop` and `calc_mse_loop`? 
+1f.  How do you expect the performance of `calc_mse_flloop` to compare to the performance of `calc_spectrum_flloop` and `calc_mse_loop`?
 """
 
 # ╔═╡ 1989da2a-1fe2-49a0-b279-5925ae4b428c
@@ -726,7 +726,7 @@ end
 
 # ╔═╡ b0e08212-7e12-4d54-846f-5b0863c37236
 if !ismissing(response_1f)
-	result_mse_flloop = calc_mse_flloop(lambdas,conv_spectrum,conv_spectrum,v) 
+	result_mse_flloop = calc_mse_flloop(lambdas,conv_spectrum,conv_spectrum,v)
 	stats_mse_flloop = @timed calc_mse_flloop(lambdas,conv_spectrum,conv_spectrum,v)
 	(;  time=stats_mse_flloop.time, bytes=stats_mse_flloop.bytes )
 end
@@ -734,7 +734,7 @@ end
 # ╔═╡ 3183c6ac-5acd-4770-a638-c4c6ba3f7c4f
 if !ismissing(response_1f)
 md"""
-1g.  How did the performance of `calc_mse_flloop` compare to the performance of `calc_mse_loop`?  Was the wall time for the parallel loop to compute the mean squared error  $(stats_mse_flloop.time) sec  
+1g.  How did the performance of `calc_mse_flloop` compare to the performance of `calc_mse_loop`?  Was the wall time for the parallel loop to compute the mean squared error  $(stats_mse_flloop.time) sec
 nearly twice that of the parallel loop to compute one spectrum $(stats_spec_flloop.time) sec?  Try to explain the main differences.
 """
 end
@@ -759,9 +759,9 @@ One advantage of parallelizing your code with [FLoops.jl](https://juliafolds.git
 # ╔═╡ 383aa611-e115-482e-873c-4487e53d457f
 md"# Mapreduce
 
-We can combine `map` and `reduce` into one function `mapreduce`.  There are opportunities for some increased efficiencies when merging the two, since the ammount of communications between threads can be significantly decreased thanks to the reduction operator.  Mapreduce is a common, powerful and efficient programming pattern.  For example, we often want to evaluate a model for many input values, compare the results of the model to data and the compute some statistic about how much the model and data differ.  
+We can combine `map` and `reduce` into one function `mapreduce`.  There are opportunities for some increased efficiencies when merging the two, since the ammount of communications between threads can be significantly decreased thanks to the reduction operator.  Mapreduce is a common, powerful and efficient programming pattern.  For example, we often want to evaluate a model for many input values, compare the results of the model to data and the compute some statistic about how much the model and data differ.
 
-In this exercise, we'll demonstrate using `mapreduce` for calculating the mean squared error between the model and the model Doppler shifted by a velocity, $v$.  First, we'll 
+In this exercise, we'll demonstrate using `mapreduce` for calculating the mean squared error between the model and the model Doppler shifted by a velocity, $v$.  First, we'll
 "
 
 # ╔═╡ 2c6fa743-3dec-417b-b05a-17bb52b5d39d
@@ -770,7 +770,7 @@ In this exercise, we'll demonstrate using `mapreduce` for calculating the mean s
 # ╔═╡ 17659ddb-d4e0-4a4b-b34c-8ac52d5dad45
 function calc_mse_mapreduce(lambdas::AbstractArray, spec1::AbstractSpectrum, spec2::AbstractSpectrum, v::Number)
 	c = ModelSpectrum.speed_of_light
-	z = v/c 
+	z = v/c
 	spec2_shifted = doppler_shifted_spectrum(spec2,z)
 	mse = mapreduce(λ->(spec1.(λ) .- spec2_shifted.(λ)).^2, +, lambdas)
 	mse /= length(lambdas)
@@ -788,13 +788,13 @@ md"## Parallel mapreduce"
 
 # ╔═╡ aad94861-e2b3-417d-b640-b821e53adb23
 md"""
-The ThreasX package provides a multi-threaded version of mapreduce that we can easily drop in.  
+The ThreasX package provides a multi-threaded version of mapreduce that we can easily drop in.
 """
 
 # ╔═╡ 1778899b-8f05-4b1f-acb5-32af1ace08ee
 function calc_mse_mapreduce_threadsx(lambdas::AbstractArray, spec1::AbstractSpectrum, spec2::AbstractSpectrum,  v::Number; basesize::Integer = 1)
 	c = ModelSpectrum.speed_of_light
-	z = v/c 
+	z = v/c
 	spec2_shifted = doppler_shifted_spectrum(spec2,z)
 	mse = ThreadsX.mapreduce(λ->(spec1.(λ) .- spec2_shifted.(λ)).^2, +, lambdas, basesize=basesize)
 	mse /= length(lambdas)
@@ -834,17 +834,17 @@ end
 
 # ╔═╡ c4ff4add-ab3c-4585-900e-41f17e905ac5
 md"""
-1i.  Think about how you will parallelize your class project code.  The first parallelization uses a shared-memory model.  Which of these programming patterns would be a good fit for your project?  Can your project calculation be formulated as a map or mapreduce problem?  If not, then could it be implemented as a series of multiple maps/reductions/mapreduces?  
+1i.  Think about how you will parallelize your class project code.  The first parallelization uses a shared-memory model.  Which of these programming patterns would be a good fit for your project?  Can your project calculation be formulated as a map or mapreduce problem?  If not, then could it be implemented as a series of multiple maps/reductions/mapreduces?
 
 Which of the parallel programming strategies are well-suited for your project?
 
 After having worked through this lab, do you anticipate any barriers to applying one of these techniques to your project?
-		
+
 """
 
 # ╔═╡ ac18f1ca-0f60-4436-9d8a-797b3dfd8657
 response_1i = missing  #= md"""
-Insert your 
+Insert your
 multi-line
 response
 """
@@ -861,18 +861,18 @@ end
 
 # ╔═╡ 8737797c-6563-4513-a5fc-fde9681b4c63
 md"""
-1j.  Before parallelizing your project code for shared memory, try parallelizing , get some practice by writing a function calc_χ²_my_way in the cell below to parallelize the calculation of calculating χ² using whichever parallelization strategy that you plan to use for your project.  Feel free to refer to the serial function function `calc_χ²` at bottom of notebook. 
+1j.  Before parallelizing your project code for shared memory, try parallelizing , get some practice by writing a function calc_χ²_my_way in the cell below to parallelize the calculation of calculating χ² using whichever parallelization strategy that you plan to use for your project.  Feel free to refer to the serial function function `calc_χ²` at bottom of notebook.
 """
 
 # ╔═╡ 87df5b25-0d2f-4f81-80f1-aaf6c9f89ce3
-# response_1i: 
+# response_1i:
 function calc_χ²_my_way(lambdas::AbstractArray, spec1::AbstractSpectrum, spec2::AbstractSpectrum, σ1::AbstractArray, σ2::AbstractArray, v::Number; #= any optional parameters? =# )
     # INSERT YOUR CODE HERE
     return missing
 end
 
 # ╔═╡ bd77bc71-ffdf-4ba1-b1ee-6f2a69044e6f
-begin 
+begin
     σ_obs1 = 0.02*ones(size(lambdas))
     σ_obs2 = 0.02*ones(size(lambdas))
 end;
@@ -905,7 +905,7 @@ TableOfContents(aside=true)
 function calc_χ²_loop(lambdas::AbstractArray, spec1::AbstractSpectrum, spec2::AbstractSpectrum, σ1::AbstractArray, σ2::AbstractArray, v::Number )
     @assert size(lambdas) == size(σ1) == size(σ2)
     c = ModelSpectrum.speed_of_light
-    z = v/c 
+    z = v/c
     spec2_shifted = doppler_shifted_spectrum(spec2,z)
     tmp1 = spec1(first(lambdas))
     tmp2 = spec2_shifted(first(lambdas))
