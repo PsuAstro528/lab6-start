@@ -267,9 +267,9 @@ num_runs = 5
 ```
 
 Notice that `num_runs` has now been set to two different values at different parts of this notebook.  The value of `num_runs` will depend on which of the cells has been run most recently.
-Sometimes, it can be conveneient to change a variable like this.  But it also makes it very easy to confuse yourself.  E.g., the code that you see in the notebook at any time is no longer guarenteed to be a complete representation of what the computer has computed.  
+Sometimes, it can be convenient to change a variable like this.  But it also makes it very easy to confuse yourself.  E.g., the code that you see in the notebook at any time is no longer guaranteed to be a complete representation of what the computer has computed.  
 
-(In previous semesters, when I used Jupyter notebooks, by far the most common problem students encountered was running cells out of order and getting into some unintended state.  So my first suggestion was nearly always "Restart your kernel and step through the notebook in order."  While that's not a big deal for small notebooks, it can quickly become tediuos and time consuming.  Pluto solved that problem!  That's why I'm only using Jupyter for a few exercises that wouldn't work well with a Pluto notebook.)
+(In previous semesters, when I used Jupyter notebooks, by far the most common problem students encountered was running cells out of order and getting into some unintended state.  So my first suggestion was nearly always "Restart your kernel and step through the notebook in order."  While that's not a big deal for small notebooks, it can quickly become tedious and time consuming.  Pluto solved that problem!  That's why I'm only using Jupyter for a few exercises that wouldn't work well with a Pluto notebook.)
 
 ```julia
 ```
@@ -617,7 +617,7 @@ end
 @test isapprox( compute_using_distributed_for_loop(lambdas,conv_spectrum) , result_ref)
 ```
 
-2p.  How do you expect the performance of `compute_using_distributed_for_loop` to compare to the performance of using `pmap` to compute the spectrum (after using a good base size)?
+2p.  How do you expect the performance of `compute_using_distributed_for_loop` to compare to the performance of using `pmap` to compute the spectrum (after using a good batch size)?
 
 ```julia
 response_2p = missing # INSERT response
@@ -720,7 +720,7 @@ for i in 1:num_runs @time calc_mse_flloop(lambdas, conv_spectrum, conv_spectrum,
 
 ## Comparing Multi-threading vs Multi-processing performance more easily
 
-Wouldn't it be nice if we didn't have to rewrite our code for each architectures?  There are some relatively young packages that make this possible (e.g., [FLoops.jl](https://juliafolds.github.io/FLoops.jl/dev/) and [KernelAbstractions.jl](https://juliagpu.github.io/KernelAbstractions.jl/stable/)).  Below we'll compare the performance of serial, multi-threaded and multi-processing versions of our function by simply specifying a different *executor*, as shown below.
+Wouldn't it be nice if we didn't have to rewrite our code for each architecture?  There are some relatively young packages that make this possible (e.g., [FLoops.jl](https://juliafolds.github.io/FLoops.jl/dev/) and [KernelAbstractions.jl](https://juliagpu.github.io/KernelAbstractions.jl/stable/)).  Below we'll compare the performance of serial, multi-threaded and multi-processing versions of our function by simply specifying a different *executor*, as shown below.
 
 ```julia
 for i in 1:num_runs @time calc_mse_flloop(lambdas, conv_spectrum, conv_spectrum, 10.0, ex = SequentialEx(simd = Val(true)) ) end
