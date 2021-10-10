@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.16.1
+# v0.16.0
 
 using Markdown
 using InteractiveUtils
@@ -116,7 +116,7 @@ The [CpuId.jl](https://github.com/m-j-w/CpuId.jl) package provides some useful f
 """
 
 # ╔═╡ 73e5e40a-1e59-41ed-a48d-7fb99f5a6755
-cpucores()   # query number of physcal cores
+cpucores()   # query number of physical cores
 
 # ╔═╡ f97f1815-50a2-46a9-ac20-e4a3e34d898c
 cputhreads() # query number of logical cores
@@ -174,7 +174,7 @@ First, you'll use the code in the exercise, so you have a calculation that's big
 
 You don't need to read all of this code right now.  But, when you're writing code for your class project, you're likely to want to make use of some of these same programming patterns.   It may be useful to refer back to this code later to help see examples of how to apply these design patterns in practice.
 
-In the Helper code section at the bottom of the notebook, we read the code in `src/ModelSpectrum.jl` and place it in a module named ModelSpectrum.  Note that this implicitly includes the code from other files: `continuum.jl`, `spectrum.jl` and `convolution_kernels.jl`.
+In the Helper code section at the bottom of the notebook, we read the code in `src/model_spectrum.jl` and place it in a module named ModelSpectrum.  Note that this implicitly includes the code from other files: `continuum.jl`, `spectrum.jl` and `convolution_kernels.jl`.
 Then we'll bring several of the custom types into scope, so we can use them easily below.
 """
 
@@ -371,7 +371,7 @@ md"""
 Our calculation is one example of a very useful programming pattern, known as **map**.  The map pattern corresponds to problems where the total work can be organized as doing one smaller calculation many times with different input values.
 Julia provides a [`map`](https://docs.julialang.org/en/v1/base/collections/#Base.map) function (as well as `map!` for writing to memory that's been preallocated ) that can be quite useful.
 `map(func,collection)` applies func to every element of the collection and returns a collection similar in size to collection.
-In our example, each input wavelength is mapped to out output flux.
+In our example, each input wavelength is mapped to our output flux.
 """
 
 # ╔═╡ ca9c7d9e-e6cc-46cc-8a9b-ccda123591a2
@@ -434,7 +434,7 @@ md"# Parallelization via multiple threads"
 
 # ╔═╡ 3717d201-0bc3-4e3c-8ecd-d835e58f6821
 md"""
-Julia has native support for using multiple **threads**.  This is useful when you have one computer with multiple processor cores.  Then each thread can execute on a separate processor core.  Because the threads are part of the same **process**, every thread has access to all the memory used by every other thread.  Programming with threads requires being careful to avoid undefined behavior because threads read and write to the same memory location in an unexpected order.  In a general multi-threaded programming can be intimidating, since arbitrary parallel code is hard to write, read, debug and maintain.  One way to keep things managable is to stick with some common programming patterns which are relatively easy to work with.  We'll explore using threads for a parallel for and a parallel map.
+Julia has native support for using multiple **threads**.  This is useful when you have one computer with multiple processor cores.  Then each thread can execute on a separate processor core.  Because the threads are part of the same **process**, every thread has access to all the memory used by every other thread.  Programming with threads requires being careful to avoid undefined behavior because threads read and write to the same memory location in an unexpected order.  In general, multi-threaded programming can be intimidating, since arbitrary parallel code is hard to write, read, debug and maintain.  One way to keep things managable is to stick with some common programming patterns which are relatively easy to work with.  We'll explore using threads for a parallel for and a parallel map.
 """
 
 # ╔═╡ 496e8c5e-251b-4448-8c59-541877d752c1
@@ -447,7 +447,7 @@ If your julia kernel has only a single thread, then it will still run in serial.
 
 # ╔═╡ 04bcafcd-1d2f-4ce5-893f-7ec5bb05f9ed
 md"""
-1a.  Given that this notebook is using $(Threads.nthreads()) threads, what is the theoretical maximum improvement in performance?  How much faster do you expect the `conv_spectrum` code to run using `ThreadsX.map` relative to searial `map`?
+1a.  Given that this notebook is using $(Threads.nthreads()) threads, what is the theoretical maximum improvement in performance?  How much faster do you expect the `conv_spectrum` code to run using `ThreadsX.map` relative to serial `map`?
 """
 
 # ╔═╡ ca8ceb27-86ea-4b90-a1ae-86d794c9fc98
@@ -603,7 +603,7 @@ end
 tip(md"""
 ## ''Embarassingly'' parallel is good
 
-So far, we've demonstrated parallelizing a computation that can be easily broken into smaller tasks that do not need to communicate with each other.  This is often called an called *embarassingly parallel* computation.  Don't let the name mislead you.  While it could be embarassingly if a Computer Science graduate student tried to make a Ph.D. thesis out of parallelizing an embarassingly parallel problem, that doesn't mean that programmers shouldn't take advantage of opportunities to use embarssingly parallel techniques when they can.If you can parallelize your code using embarassingly parallel techniques, then you should almost always parallelize it that way, instead of (or at least before) trying to parallelize it at a finer grained level.
+So far, we've demonstrated parallelizing a computation that can be easily broken into smaller tasks that do not need to communicate with each other.  This is often called an called *embarassingly parallel* computation.  Don't let the name mislead you.  While it could be embarassingly if a Computer Science graduate student tried to make a Ph.D. thesis out of parallelizing an embarassingly parallel problem, that doesn't mean that programmers shouldn't take advantage of opportunities to use embarssingly parallel techniques when they can.  If you can parallelize your code using embarassingly parallel techniques, then you should almost always parallelize it that way, instead of (or at least before) trying to parallelize it at a finer grained level.
 
 Next, we'll consider problems that do require some communications between tasks, but in a very structured manner.
 """)
@@ -611,9 +611,9 @@ Next, we'll consider problems that do require some communications between tasks,
 # ╔═╡ 547ad5ba-06ad-4707-a7ef-e444cf88ae53
 md"""
 # Reductions
-Many common calculations can be formulated as a [**reduction operation**](https://en.wikipedia.org/wiki/Reduction_operator), where many inputs are transformed into one output.  Common examples would be `sum` or `maximum`.  One key property of reduction operations is that they are associative, meaning it's ok for the computer to change the order in which inputs are reduced.  (Thinking back to our lesson about floating point arithmetic, many operation aren't formally associative or commutative, but are still close enough that we're willing to let the computer reorder calculations.)
+Many common calculations can be formulated as a [**reduction operation**](https://en.wikipedia.org/wiki/Reduction_operator), where many inputs are transformed into one output.  Common examples would be `sum` or `maximum`.  One key property of reduction operations is that they are associative, meaning it's ok for the computer to change the order in which inputs are reduced.  (Thinking back to our lesson about floating point arithmetic, many operations aren't formally associative or commutative, but are still close enough that we're willing to let the computer reorder calculations.)
 
-When we have multiple processors, the input can be divided into subsets and each processor reduce each subset separately.  Then each processor only needs to communicate one value of the variable being reduced to another processor, even if the input is quite large.  For some problems, reductions also reduce the ammount of memory allocations necessary.
+When we have multiple processors, the input can be divided into subsets and each processor reduce each subset separately.  Then each processor only needs to communicate one value of the variable being reduced to another processor, even if the input is quite large.  For some problems, reductions also reduce the amount of memory allocations necessary.
 """
 
 # ╔═╡ 7ba35a63-ac61-434b-b759-95d505f62d9e
@@ -673,12 +673,12 @@ end
 
 # ╔═╡ 6e52c719-e9fc-478a-9709-49e250a27d6b
 md"""
-As expected, the $(floor(Int,stats_mse_loop.bytes//1024^2)) MB allocated when we compute the mean squared error between *two* simulated spectra is very nearly twice the the $(floor(Int,stats_spec_serial_loop.bytes//1024^2)) MB allocated by the serial for loop to compute the one spectrum at each wavelength.
+As expected, the $(floor(Int,stats_mse_loop.bytes//1024^2)) MB allocated when we compute the mean squared error between *two* simulated spectra is very nearly twice the $(floor(Int,stats_spec_serial_loop.bytes//1024^2)) MB allocated by the serial for loop to compute the one spectrum at each wavelength.
 """
 
 # ╔═╡ e36cda69-d300-4156-9bef-a372f94306d9
 md"""
-Similarly, it's likely that the wal time for the serial loop to compute the mean squared error $(stats_mse_loop.time) sec
+Similarly, it's likely that the wall time for the serial loop to compute the mean squared error $(stats_mse_loop.time) sec
 is nearly twice that of the serial loop to compute one spectrum $(stats_spec_serial_loop.time) sec.
 So far it doesn't seem particularly interesting.
 """
@@ -686,7 +686,7 @@ So far it doesn't seem particularly interesting.
 # ╔═╡ 161ea6af-5661-44e1-ae40-1b581b636c25
 md"""
 ## Parallel loop with reduction
-Next, we'll use [FLoops.jl](https://github.com/JuliaFolds/FLoops.jl) to compute the mean sequared error using multiple threads.  Note the we need to use the `@floop` macro around the loop  *and* the `@reduce` macro to indicate which variables are part of the reduction.
+Next, we'll use [FLoops.jl](https://github.com/JuliaFolds/FLoops.jl) to compute the mean sequared error using multiple threads.  Note that we need to use the `@floop` macro around the loop  *and* the `@reduce` macro to indicate which variables are part of the reduction.
 """
 
 # ╔═╡ 1c1ccc51-e32a-4881-b892-095d2be55916
@@ -759,7 +759,7 @@ One advantage of parallelizing your code with [FLoops.jl](https://juliafolds.git
 # ╔═╡ 383aa611-e115-482e-873c-4487e53d457f
 md"# Mapreduce
 
-We can combine `map` and `reduce` into one function `mapreduce`.  There are opportunities for some increased efficiencies when merging the two, since the ammount of communications between threads can be significantly decreased thanks to the reduction operator.  Mapreduce is a common, powerful and efficient programming pattern.  For example, we often want to evaluate a model for many input values, compare the results of the model to data and the compute some statistic about how much the model and data differ.
+We can combine `map` and `reduce` into one function `mapreduce`.  There are opportunities for some increased efficiencies when merging the two, since the amount of communications between threads can be significantly decreased thanks to the reduction operator.  Mapreduce is a common, powerful and efficient programming pattern.  For example, we often want to evaluate a model for many input values, compare the results of the model to data and the compute some statistic about how much the model and data differ.
 
 In this exercise, we'll demonstrate using `mapreduce` for calculating the mean squared error between the model and the model Doppler shifted by a velocity, $v$.  First, we'll
 "
@@ -788,7 +788,7 @@ md"## Parallel mapreduce"
 
 # ╔═╡ aad94861-e2b3-417d-b640-b821e53adb23
 md"""
-The ThreasX package provides a multi-threaded version of mapreduce that we can easily drop in.
+The ThreadsX package provides a multi-threaded version of mapreduce that we can easily drop in.
 """
 
 # ╔═╡ 1778899b-8f05-4b1f-acb5-32af1ace08ee
@@ -817,7 +817,7 @@ end
 
 # ╔═╡ 3f01d534-b01d-4ab4-b3cd-e809b02563a9
 md"""
-1h.  How did the performance of `calc_mse_mapreduce_threadsx` compare to the performance of `calc_mse_map_serial`?  Can you explain why this differs from the comparison of `calc_spectrum_mapreduce_threadsx` to `ThreadsX.map(conv_spectrum,lambdas,..)`?
+1h.  How did the performance of `calc_mse_mapreduce_threadsx` compare to the performance of `calc_mse_map_mapreduce`?  Can you explain why this differs from the comparison of `calc_spectrum_mapreduce_threadsx` to `ThreadsX.map(conv_spectrum,lambdas,..)`?
 """
 
 # ╔═╡ d16adf94-72c3-480d-bd92-738e806068f8
@@ -861,7 +861,7 @@ end
 
 # ╔═╡ 8737797c-6563-4513-a5fc-fde9681b4c63
 md"""
-1j.  Before parallelizing your project code for shared memory, try parallelizing , get some practice by writing a function calc_χ²_my_way in the cell below to parallelize the calculation of calculating χ² using whichever parallelization strategy that you plan to use for your project.  Feel free to refer to the serial function function `calc_χ²` at bottom of notebook.
+1j.  Before parallelizing your project code for shared memory, try parallelizing , get some practice by writing a function `calc_χ²_my_way` in the cell below to parallelize the calculation of calculating χ² using whichever parallelization strategy that you plan to use for your project.  Feel free to refer to the serial function function `calc_χ²` at bottom of notebook.
 """
 
 # ╔═╡ 87df5b25-0d2f-4f81-80f1-aaf6c9f89ce3

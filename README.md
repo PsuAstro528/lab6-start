@@ -16,10 +16,8 @@ Remember, that you need follow the provided link to create your own private copy
 ## Exercise 1:  Parallelization for Multi-Core Workstations via Multiple-Threads
 ### Goals:
 - Choose an appropriate number of worker processors for your compute node
-- Load code and packages on worker nodes
-- Parallelize code using pmap
-- Parallelize code using Threads.@threads
 - Parallelize code using ThreadsX.map and ThreadsX.mapreduce
+- Parallelize code using Threads.@threads
 - Parallelize code using ThreadsX.foreach
 - Parallelize code using FLoops & ThreadedEx
 
@@ -36,4 +34,12 @@ From a Pluto session, work through ex1.jl
 - Parallelize code using @distributed for loop with a reducing operation
 - Parallelize code using FLoops & DistributedEx
 
-From a **Jupyter** session, work through ex3.ipynb
+From a **Jupyter** session, work through ex2.ipynb.
+Once you've finished your lab, remember to [create, commit and push a markdown version of your Jupyter notebook](http://localhost:1313/tips/submitting/submitting/#convert-to-markdown).  The short version is
+```bash
+julia --project=. -e 'using Weave; convert_doc("NOTEBOOK_NAME.ipynb","NOTEBOOK_NAME.jmd")'
+
+git add NOTEBOOK_NAME.jmd  
+git commit -m "Adding markdown version of Jupyternotebok"
+git push
+```
