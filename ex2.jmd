@@ -5,12 +5,12 @@
 ### Hardware configuration for this exercise
 In this lab exercise, we'll explore a few different ways that we can parallelize calculations across multiple cores of a single workstation or server.  Some of the syntax and programming patterns are very similar as to what you'll use later when we parallelize our code for distributed computing (i.e., over a number of processors that do not have direct access to the same memory.)
 
-Fortunately, most modern workstations and even laptops have multiple cores.  As of 2021, most of the ICS-ACI compute nodes have 14-24 cores.  (The high-memory nodes have 40 cores. The HPRC nodes are configured to offer many more virtual cores, but HPRC jobs should not use more than 20 cores.)  
+Fortunately, most modern workstations and even laptops have multiple cores.  As of Fall 2023, most of Roar Collab's "standard" compute nodes have 48 cores.  (The high-memory nodes have 40 cores. Basic cores have 80 cores.  Various GPU nodes have 24-48 CPU cores.)  
 
-For this exercise, it's important that you actually have access to multiple processor cores.  If you're using Julia installed on your own machine, then you don't need to do anything special before starting the lab.  However, if you're using the ICDS-ACI portal to access the Jupyter Lab server, then you will need to have requested multiple processor cores when you first submited the request for the JupyterLab server using the box labeled "Number of Cores", i.e. _before you start executing cells in this notebook_.  Here's a [screenshot](images/portal_screenshot.png) showing the screen where you specify multiple cores.  
+For this exercise, it's important that you actually have access to multiple processor cores.  If you're using Julia installed on your own machine, then you don't need to do anything special before starting the lab.  However, if you're using the Roar Collab portal to access the Jupyter Lab server, then you will need to have requested multiple processor cores when you first submited the request for the BYOE JupyterLab server using the box labeled "Number of Cores", i.e. _before you start executing cells in this notebook_.  Here's a [screenshot](images/portal_screenshot.png) showing the screen where you specify multiple cores.  
 
-While we're in class, please ask for just 4 cores, since there are many of us using the same two compute nodes at once.  
-If you return to working on the lab outside of class (and not right before the deadline), then feel free to try benchmarking the code using 8 cores, 12 or even 16 cores.  If you do ask for several cores, then please be extra diligent about deleting your session via the ICDS-ACI Portal when you're done, so they become avaliable to other members of the class.
+While we're in class, please ask for just 4 cores, since there are many of us using the system at once.  
+If you return to working on the lab outside of class (and not right before the deadline), then feel free to try benchmarking the code using 8 cores, 12 or even 16 cores.  If you do ask for several cores, then please be extra diligent about deleting your session via the Roar Collab Portal when you're done, so they become avaliable to other members of the class.
 
 ### Why Jupyter?
 For this exercise, we're using a Jupyter notebook, instead of a Pluto notebook.  Why?
@@ -32,9 +32,15 @@ Pkg.activate(".")                            # Project.toml specifies the packag
 Pkg.instantiate()                            # Install any packages needed
 ```
 
+We'll want the packages that we plan to use for our computations below to be loaded and in scope on each worker process.  In order to make sure that we don't trigger multiple worker processes trying to precompile packages at once, we'll first have the delegator process precompile all the packages used in this exercise. 
+
+```julia
+Pkg.precompile()
+```
+
 ### Getting setup for parallel computation
 
-First, let us load Julia's `Distributed` module that provides much of the needed functionality.
+First, let us load Julia's `Distributed` module that provides much of the needed functionality for communicating across processes (that could be on the same node or different nodes).
 
 ```julia
 using Distributed
@@ -50,7 +56,7 @@ Sys.cpu_summary()
 ```
 
 As discussed in exercise 1, just because the compute node we've been assigned has many cores, doesn't mean that we're allowed to use all of them.  
-We'll check if this notebook is running inside a PBS job, and if so, use the number of cores that we've been assigned.  If we're not inside a PBS job, then we'll use the number of physical cores. 
+We'll check if this notebook is running inside a Slurm (or PBS) job, and if so, use the number of cores that we've been assigned.  If we're not inside a Slurm (or PBS) job, then we'll use the number of physical cores. 
 
 ```julia
 using CpuId
@@ -60,7 +66,11 @@ using CpuId
 if haskey(ENV,"PBS_NUM_PPN")
     pbs_procs_per_node = parse(Int64,ENV["PBS_NUM_PPN"])
     num_cores_to_use = pbs_procs_per_node 
-else
+elseif haskey(ENV,"SLURM_CPUS_PER_TASK") && haskey(ENV,"SLURM_TASKS_PER_NODE")
+    slurm_procs_per_task = parse(Int64,ENV["SLURM_CPUS_PER_TASK"])
+    slurm_tasks_per_node = parse(Int64,ENV["SLURM_TASKS_PER_NODE"])
+    num_cores_to_use = slurm_procs_per_task * slurm_tasks_per_node
+else  # presumably running locally and can use all cores
     num_physical_cores = cpucores()
     num_cores_to_use = num_physical_cores 
 end
@@ -76,7 +86,7 @@ Next, we'll tell Julia to add several worker processes.
 
 ```julia
 if num_cores_to_use>1
-    addprocs(num_cores_to_use-1)
+    workers_ids = addprocs(num_cores_to_use-1, exeflags="--threads=1")
 end
 ```
 
@@ -87,25 +97,16 @@ If you're every unsure of how many workers you currently have avaliable, you can
 nworkers()
 ```
 
+```julia
+map(proc->fetch(@spawnat proc Threads.nthreads()) ,  workers_ids)
+```
+
 Note that the list of workers now excludes 1 and the number of workers is equal to the number you added, rather than being one plus that number.  Why?  The original process is now in charge of delegating the work amongst the worker processes. (Historically, this process was referred to as the "master process", and you're likely to still that terminology in online documentation and questions.  I'll try to use the "delegator process" instead.)  When you have a lot of workers, it's often advantageous to let one process focus on managing all the communications and other overhead associated with parallelization.  That way the worker processes are likely to stay more nearly in sync, rather than having to repeatedly wait for the delegator process to catch up.  On the other hand, if there is relatively little overhead work for the delegator process, then it is often useful to set the number of workers equal to the number of available CPU cores, even though that means one process will have to do a little more work than the others.  We'll try both below.
 
 ### Loading Packages and modules
 
 Now, that we have loaded the `Distributed` package, we can use the functions and macros that it provides to start code and packages that we want to use during this exercise onto the other processes.  Unlike when we were using multi-threading, with distributed computing each worker has its own chunk of memory and the programmer can control whether code is to be loaded on every process or just one/some.  
-But before we load packages onto worker processes, we need to make sure that each worker is using the same environment (i.e., knows which versions of which packages should be avaliable).  We'll do that by telling each worker to activate the same environment, as specificed in the lab's `Project.toml` file.  
-In this case, we don't need to install or instantiate on each worker, since we already installed them above, and on ICDS-ACI, each worker have access to the same filesystem.  (We also signal that workers should not attempt to update the Julia package registry.  Asking multiple processes to try to update the reigstry at once would be annoyingly slow (and I worry that it might even cause your Julia depot to get messed up).)
-
-```julia
-@everywhere using Pkg
-@everywhere Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true
-@everywhere Pkg.activate(".")
-```
-
-Next, we want the packages that we plan to use for our computations below to be loaded and in scope on each worker.  In order to make sure that we don't trigger multiple worker processes trying to precompile packages at once, we'll first have the delegator process precompile all the packages used in this exercise. 
-
-```julia
-Pkg.precompile()
-```
+When running on Roar Collab, we don't need to install or instantiate the pacakages on each worker, since we already installed them above and each worker has access to the same filesystem on Roar Collab.
 
 Again, we'll use the `@everywhere` macro in front of the `using` statement to load packages on both the delegator and worker processes.  
 
@@ -114,7 +115,7 @@ Again, we'll use the `@everywhere` macro in front of the `using` statement to lo
 ```
 
 Typing `@everywhere` in front of every line of code would get very annoying fast.  So it's better to put the common code that you want every worker to load into a separate file (and even better is to organize the code into one or more modules or packages).  Then, we can load a whole bunch of functions that we'll want to use with one line.
-In this exercise, we'll load the same code as in exercise 1 of this lab.  (As before, you don't need to review all the code in `src` unless you find it interesting or useful to see the programming patterns being demonstrated.)  The main difference in this exercise is that we'll include the file `src/lab6.jl` instead of the file `model_spectrum.jl`. `lab6.jl` includes the code from `model_spectrum.jl` (and the other files that it includes) and wraps them in a module named `lab6`.  (In contrast, Pluto's `ingredients` command automatically wraps code from a file into a module and returns it, so that Pluto can keep track of dependancies, which it needs to do to make a reactive notebook.)  
+In this exercise, we'll load the same code as in exercise 1 of this lab.  (As before, you don't need to review all the code in `src` unless you find it interesting or useful to see the programming patterns being demonstrated.)  The main difference in this exercise is that we'll include the file `src/lab6.jl` instead of the file `model_spectrum.jl`. `lab6.jl` includes the code from `model_spectrum.jl` (and the other files that it includes) and wraps them in a module named `lab6`.  (In contrast, Pluto's `@ingredients` macro automatically wraps code from a file into a module and returns it, so that Pluto can keep track of dependancies, which it needs to do to make a reactive notebook.)  
 We preface the `include` with `@everywhere`, since we want all of the processors to be able to make use of these function and types.
 
 ```julia
@@ -208,7 +209,7 @@ plot!(lambdas[idx_plot],result_ref[idx_plot], label="Convolved spectrum")
 First, let's benchmark the calculation of this spectrum on a single processor.  To keep things speedy, we'll time each method just a few times, rather than using `@btime`.
 
 ```julia
-num_runs = 2
+num_runs = 3;
 ```
 
 ```julia
@@ -263,7 +264,7 @@ The performance of map results should be very similar to the broadcasted and fus
 Before we start parallelizing code, let's increase the number of times we'll benchmark each function.
 
 ```julia
-num_runs = 5
+num_runs = 5;
 ```
 
 Notice that `num_runs` has now been set to two different values at different parts of this notebook.  The value of `num_runs` will depend on which of the cells has been run most recently.
@@ -301,17 +302,17 @@ for i in 1:num_runs @time pmap(x->conv_spectrum.(x),lambdas) end
 response_2e = missing # INSERT responce as string
 ```
 
-You were likely disappointed in the speed-up factor.  What could have gone wrong?  In this case, we have a non-trivial, but still modest amount of work to do for each wavelength.  `pmap` distributes the work one element at a time.  The overhead in distributing the work and assembling the pieces likely ate into the potential performance gains.  To improve on this, we can tell `pmap` to distribute the work in batches.  Below, we'll specify a batch_size via an optional named parameter.
+You were likely a little disappointed in the speed-up factor.  What could have gone wrong?  In this case, we have a non-trivial, but still modest amount of work to do for each wavelength.  `pmap` distributes the work one element at a time.  The overhead in distributing the work and assembling the pieces likely ate into the potential performance gains.  To improve on this, we can tell `pmap` to distribute the work in batches.  Below, we'll specify a batch_size via an optional named parameter.
 
 ```julia
-for i in 1:num_runs @time pmap(conv_spectrum,lambdas,batch_size=512) end
+for i in 1:num_runs @time pmap(conv_spectrum,lambdas,batch_size=256) end
 ```
 
 ```julia
-for i in 1:num_runs @time pmap(x->conv_spectrum.(x),lambdas,batch_size=512) end
+for i in 1:num_runs @time pmap(x->conv_spectrum.(x),lambdas,batch_size=256) end
 ```
 
-2f.  How much faster was the code using `pmap` with batches than the the serial version (focusing on the version using broadcasting)?  How does this compare to your original expectations?
+2f.  Was `pmap` faster when using  batches than the the serial version (focusing on the version using broadcasting)?  If so, how much?  How does this compare to your original expectations?
 
 ```julia
 response_2f = missing # INSERT responce as string
@@ -321,12 +322,8 @@ Remember that we originally added one less worker processes than the number of p
 
 ```julia
 if nworkers() < num_cores_to_use
-    procs_without_code = addprocs(num_cores_to_use-nworkers())
+    procs_without_code = addprocs(num_cores_to_use-nworkers(), exeflags="--threads=1")
 end
-```
-
-```julia
-procs_without_code
 ```
 
 2g.  How long do you expect our function to take using `pmap` (using same batch size) now that we have one more worker process?
@@ -336,10 +333,6 @@ response_2g = missing # INSERT RESPONSE
 ```
 
 Let's test that.  But before we can, we'll need to load the code onto the recently added worker node.
-
-```julia
-@everywhere (using Pkg; Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true; Pkg.activate("."))
-```
 
 ```julia
 @everywhere using Distributions
@@ -361,7 +354,7 @@ map(proc->fetch(@spawnat proc include("src/lab6.jl") ),  procs_without_code);
 ```
 
 ```julia
-for i in 1:num_runs @time pmap(conv_spectrum,lambdas,batch_size=512) end
+for i in 1:num_runs @time pmap(conv_spectrum,lambdas,batch_size=256) end
 ```
 
 2h.  How did the runtime compare when we used `pmap` with as many worker processes as physical cores avaliable compared to when we used one fewer worker processes than the number of physical cores avaliable?
@@ -372,7 +365,7 @@ response_2h = missing # INSERT RESPONSE
 ```
 
 ### Shared Arrays
-Sometime the map programming pattern is limiting, inefficient, or just too cumbersome to use.  In these cases, it can be useful to define a [`SharedArray`](https://docs.julialang.org/en/v1.0/stdlib/SharedArrays/#Shared-Arrays-1).  A SharedArray is only possible when using a [shared memory system](https://en.wikipedia.org/wiki/Shared_memory), i.e., one computer has multiple processor cores that are all able to read and write data stored in a common memory system.   Data stored in a SharedArray is visible and accessible to every process.  A SharedArray also specifies which indices have been assigned to each worker process.  When an operation is to be parallelized, this information can be used to spread the work over the worker processes.  
+Sometime the map programming pattern is limiting, inefficient, or just too cumbersome to use.  In these cases, it can be useful to define a [`SharedArray`](https://docs.julialang.org/en/v1/manual/distributed-computing/#man-shared-arrays).  A SharedArray is only possible when using a [shared memory system](https://en.wikipedia.org/wiki/Shared_memory), i.e., one computer has multiple processor cores that are all able to read and write data stored in a common memory system.   Data stored in a SharedArray is visible and accessible to every process.  A SharedArray also specifies which indices have been assigned to each worker process.  When an operation is to be parallelized, this information can be used to spread the work over the worker processes.  
 (Note that code using SharedArray's can not run using processors split across multiple compute nodes, as we'll do in the next lab.) 
 
 First, we'll create a SharedArray from our existing array of wavelengths.
@@ -495,10 +488,10 @@ typeof(map(conv_spectrum,lambdas_dist))
 response_2l = missing # INSERT response
 ```
 
-Since map returned a `DArray`, we shouldn't assume that all the data is avaliable to the master process.
+Since map returned a `DArray`, we shouldn't assume that all the data is avaliable to the delegator process.
 In this case, we've only added processors that are on the same node, so we know that the data is actually all on one compute node.
 But a `DArray` can't count on that being true.  Indeed, in a future exercise, we'll use multiple cores that are spread over multiple nodes.  
-In order to bring make all the data in the DArray accessible to the master process, we could `collect` the data.
+In order to bring make all the data in the DArray accessible to the delegator process, we could `collect` the data.
 
 2m.  How do you expect the performance to compare when we run map on a `DArray` with and without collecting the data at the end?
 
@@ -517,7 +510,7 @@ response_2n = missing # INSERT response
 ```
 
 ## Reducing Data Transport
-Copying all that data back into one array for the master process to use added a significant amount to the total time.  If the data had to move over the network, then it would have taken even longer.
+Copying all that data back into one array for the delegator process to use added a significant amount to the total time.  If the data had to move over the network, then it would have taken even longer.
 Fortunately, often you don't actually need to bring all the data back to the delegator process.  For example, you might have several calculations that can be done, each leaving the data distributed across many workers, until the very end.
 Another common scenario is that you want to performing a task that can be phrased as a [`mapreduce`](https://en.wikipedia.org/wiki/MapReduce) programming pattern.  For example, imagine that we only wanted to compute the mean squared error between two models.  
 For testing purposes, it'll be good to first implement it as a serial for loop.
@@ -578,7 +571,9 @@ for i in 1:num_runs @time calc_mse_mapreduce(lambdas_dist,conv_spectrum,conv_spe
 
 2o.  How did the actual performance compare to your expectations?
 
+```julia
 response_2o = missing # INSERT response
+```
 
 ### Distributed for loops
 
@@ -586,7 +581,7 @@ While map, pmap and mapreduce can be very convenient, sometimes it's more natura
 
 ```julia
 function compute_using_distributed_for_loop_unsynced(x::AbstractArray, spectrum::T) where T<:AbstractSpectrum
-    out = zeros(length(x))  # Problematic since workers won't write to out on master
+    out = zeros(length(x))  # Problematic since workers won't write to out on delegator
     @distributed for i in 1:length(x)
         out[i] = conv_spectrum(x[i])
     end
@@ -598,8 +593,8 @@ end
 for i in 1:num_runs @time res=   compute_using_distributed_for_loop_unsynced(lambdas_dist,conv_spectrum) end
 ```
 
-Wow, that was fast!  Or was it?  No.  Actually, what happened is that Julia started the computations on the workers, and let the master process keep going, without waiting for the workers to finish.  
-Sometimes we want to do this, so the master processes can do other work while waiting on the workers to finish.  Also, each worker wrote to its own out array, so we didn't even get the output.  
+Wow, that was fast!  Or was it?  No.  Actually, what happened is that Julia started the computations on the workers, and let the delegator process keep going, without waiting for the workers to finish.  
+Sometimes we want to do this, so the delegator processes can do other work while waiting on the workers to finish.  Also, each worker wrote to its own out array, so we didn't even get the output.  
 For timing purposes, we want to make sure all the work is complete and the workers have synchronized.
 We can do this by adding the [`@sync` macro](https://docs.julialang.org/en/v1/stdlib/Distributed/#Base.@sync).
 
@@ -720,7 +715,7 @@ for i in 1:num_runs @time calc_mse_flloop(lambdas, conv_spectrum, conv_spectrum,
 
 ## Comparing Multi-threading vs Multi-processing performance more easily
 
-Wouldn't it be nice if we didn't have to rewrite our code for each architecture?  There are some relatively young packages that make this possible (e.g., [FLoops.jl](https://juliafolds.github.io/FLoops.jl/dev/) and [KernelAbstractions.jl](https://juliagpu.github.io/KernelAbstractions.jl/stable/)).  Below we'll compare the performance of serial, multi-threaded and multi-processing versions of our function by simply specifying a different *executor*, as shown below.
+Wouldn't it be nice if we didn't have to rewrite our code for each architecture?  There are a few packages that make this possible (e.g., [FLoops.jl](https://juliafolds.github.io/FLoops.jl/dev/) and [KernelAbstractions.jl](https://juliagpu.github.io/KernelAbstractions.jl/stable/)).  Below we'll compare the performance of serial, multi-threaded and multi-processing versions of our function by simply specifying a different *executor*, as shown below.
 
 ```julia
 for i in 1:num_runs @time calc_mse_flloop(lambdas, conv_spectrum, conv_spectrum, 10.0, ex = SequentialEx(simd = Val(true)) ) end
@@ -733,9 +728,6 @@ for i in 1:num_runs @time calc_mse_flloop(lambdas, conv_spectrum, conv_spectrum,
 ```julia
 for i in 1:num_runs @time calc_mse_flloop(lambdas, conv_spectrum, conv_spectrum, 10.0, ex=DistributedEx() ) end
 ```
-
-When I last tested FLoops, it still wasn't as fast as using mapreduce on a distributed array or a distributed for loop for simple problems.  
-But there may be some more complex problems, where the greater flexibility of FLoops is valuable to the programmer (e.g., if you have a large dataset and want to do several calculations using one pass through your data).
 
 2t.  Think about your class project and the parallel programming patterns demonstrated in this exercise.  
 Could your key calculation be phrased as a mapreduce problem?  Could it be phrased as one or more map calculations?  Is it advantageous to using a distributed for loop or FLoops?  
@@ -758,7 +750,7 @@ response
 # response_u2: 
 function calc_χ²_my_way(lambdas::AbstractArray, spec1::AbstractSpectrum, spec2::AbstractSpectrum, σ1::AbstractArray, σ2::AbstractArray, v::Number; #= any optional parameters? =# )
     # INSERT YOUR CODE HERE
-    return missing
+    return NaN
 end
 ```
 
