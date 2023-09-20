@@ -452,7 +452,11 @@ Inevitably, one package/pattern for parallelizing your code will be a little mor
 
 # ╔═╡ ea002e89-9f4e-441e-8998-5e9c99bb27e0
 md"""
-At first, it may seem like the above examples are just alternative syntaxes for writing a loop parallelized over multiple threads.  Why are these worth learning about?  As we'll see below, both of these packages make it relatively easy to swap between multiple forms of parallelism.  Therefore, writing your code so it can be multi-threaded using ThreadsX or FLoops is likely to make it very easy to parallelize your code for a distributed memory architecture.  FLoops can even make it easy to parallelize codes using a GPU.  Thus, it's worth keeping these in mind when planning your project.  
+At first, it may seem like the above examples are just alternative syntaxes for writing a loop parallelized over multiple threads.  Why are these worth learning about?  
+
+ThreadsX provides a drop-in replacement for several functions from Base.  The common interface makes it easy to swap in for serial code quickly.  
+
+While FLoops requires a somewhat different syntax, it makes it relatively easy to swap between multiple forms of parallelism.  Therefore, writing your code so it can be multi-threaded using FLoops is likely to make it very easy to parallelize your code for a distributed memory architecture.  FLoops can even make it easy to parallelize codes using a GPU.  Thus, it's worth keeping these in mind when planning your project.  
 """
 
 # ╔═╡ d43525da-e0a2-4d2f-9dbb-bf187eebf6c1
