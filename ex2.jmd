@@ -63,14 +63,12 @@ using CpuId
 ```
 
 ```julia
-if haskey(ENV,"PBS_NUM_PPN")
+if haskey(ENV,"PBS_NUM_PPN")              # Check PBS env variable if running on Roar Restricted
     pbs_procs_per_node = parse(Int64,ENV["PBS_NUM_PPN"])
     num_cores_to_use = pbs_procs_per_node 
-elseif haskey(ENV,"SLURM_CPUS_PER_TASK") && haskey(ENV,"SLURM_TASKS_PER_NODE")
-    slurm_procs_per_task = parse(Int64,ENV["SLURM_CPUS_PER_TASK"])
-    slurm_tasks_per_node = parse(Int64,ENV["SLURM_TASKS_PER_NODE"])
-    num_cores_to_use = slurm_procs_per_task * slurm_tasks_per_node
-else  # presumably running locally and can use all cores
+elseif haskey(ENV,"SLURM_CPUS_PER_TASK")   # Check Slurm env variable if running on Roar Collab
+    num_cores_to_use = parse(Int64,ENV["SLURM_CPUS_PER_TASK"])
+else                                       # Presumably running locally and can use all cores
     num_physical_cores = cpucores()
     num_cores_to_use = num_physical_cores 
 end
@@ -98,7 +96,9 @@ nworkers()
 ```
 
 ```julia
-map(proc->fetch(@spawnat proc Threads.nthreads()) ,  workers_ids)
+if length(workers_ids) >1
+    map(proc->fetch(@spawnat proc Threads.nthreads()) ,  workers_ids)
+end
 ```
 
 Note that the list of workers now excludes 1 and the number of workers is equal to the number you added, rather than being one plus that number.  Why?  The original process is now in charge of delegating the work amongst the worker processes. (Historically, this process was referred to as the "master process", and you're likely to still that terminology in online documentation and questions.  I'll try to use the "delegator process" instead.)  When you have a lot of workers, it's often advantageous to let one process focus on managing all the communications and other overhead associated with parallelization.  That way the worker processes are likely to stay more nearly in sync, rather than having to repeatedly wait for the delegator process to catch up.  On the other hand, if there is relatively little overhead work for the delegator process, then it is often useful to set the number of workers equal to the number of available CPU cores, even though that means one process will have to do a little more work than the others.  We'll try both below.
@@ -323,6 +323,8 @@ Remember that we originally added one less worker processes than the number of p
 ```julia
 if nworkers() < num_cores_to_use
     procs_without_code = addprocs(num_cores_to_use-nworkers(), exeflags="--threads=1")
+else
+    procs_without_code = Int64[]
 end
 ```
 
@@ -784,7 +786,4 @@ end
 
 ```julia
 @test calc_χ²_my_way(lambdas,conv_spectrum, conv_spectrum, σ_obs1, σ_obs2, 10.0 ) ≈ calc_χ²_loop(lambdas,conv_spectrum, conv_spectrum, σ_obs1, σ_obs2, 10.0 )
-```
-
-```julia
 ```
