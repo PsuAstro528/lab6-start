@@ -19,3 +19,19 @@ SharedArrays = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 Weave = "44d3d7a6-8a23-5bf8-98c5-b353f8df5ec9"
+
+[extras]
+Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
+Pluto = "c3e4b0f8-55cb-11ea-2926-15256bba5781"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+build = ["Pkg","Pluto"]
+test = ["Pluto", "Random", "Test"]
+
+[compat]
+Pkg = "1.11.0"
+Pluto = "0.20.17"
+julia = "1.11"
+
